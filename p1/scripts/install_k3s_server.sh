@@ -1,32 +1,56 @@
 #!/bin/bash
 
-set -e  # Exit on any error
+GREEN="\033[32m"
+RED="\033[31m"
+RESET="\033[0m"
 
-# Install k3s in server mode
-curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--node-ip=192.168.56.110 --node-name=ebaillotS --flannel-iface=eth1" sh -
+echo -e "${GREEN}=== Installing K3s Server Node ===${RESET}"
 
-# Wait for k3s to be ready and generate node token 
-echo "Waiting for k3s to be ready..."
-until sudo k3s kubectl get nodes; do
-    echo "Still waiting for k3s to be ready..."
-    sleep 5
+# Set required K3s flags
+export INSTALL_K3S_EXEC="--write-kubeconfig-mode=644 \
+--tls-san ebaillotS \
+--node-ip=192.168.56.110 \
+--bind-address=192.168.56.110 \
+--advertise-address=192.168.56.110"
+
+# Add dummy eth1 interface (needed for Flannel)
+echo -e "${GREEN}Creating dummy interface eth1...${RESET}"
+sudo ip link add eth1 type dummy
+sudo ip addr add 192.168.56.110/24 dev eth1
+sudo ip link set eth1 up
+
+# Install K3s
+if curl -sfL https://get.k3s.io | sh -; then
+  echo -e "${GREEN}K3s Server installation SUCCESSFUL${RESET}"
+else
+  echo -e "${RED}K3s Server installation FAILED${RESET}"
+  exit 1
+fi
+
+# Wait for Kubernetes API to be ready
+echo -e "${GREEN}Waiting for Kubernetes to be ready...${RESET}"
+until sudo k3s kubectl get nodes &>/dev/null; do
+  echo -e "${GREEN}Still waiting...${RESET}"
+  sleep 5
 done
 
-# Create a directory for the node token
-mkdir -p /vagrant/shared
+# Copy the node token for worker access
+TOKEN_PATH="/var/lib/rancher/k3s/server/node-token"
+DEST="/vagrant/token.env"
+if sudo cp "$TOKEN_PATH" "$DEST"; then
+  echo -e "${GREEN}Token saved to $DEST${RESET}"
+  sudo chmod 644 "$DEST"
+else
+  echo -e "${RED}Failed to save token${RESET}"
+  exit 1
+fi
 
-# Copy the node token to the shared directory
-sudo cp /var/lib/rancher/k3s/server/node-token /vagrant/shared/node-token
+# Copy kubeconfig for local testing (optional)
+if sudo cp /etc/rancher/k3s/k3s.yaml /vagrant/k3s.yaml; then
+  sudo chmod 644 /vagrant/k3s.yaml
+  echo -e "${GREEN}k3s.yaml saved to /vagrant${RESET}"
+fi
 
-# Ensure the node token is readable
-sudo chmod 644 /vagrant/shared/node-token
-
-# Copy the kubeconfig file to the shared directory
-sudo cp /etc/rancher/k3s/k3s.yaml /vagrant/shared/k3s.yaml
-
-# Ensure the kubeconfig file is readable
-sudo chmod 644 /vagrant/shared/k3s.yaml
-
-# Check k3s status
-echo "K3s server installation completed successfully!"
+# Show cluster status
+echo -e "${GREEN}Cluster nodes:${RESET}"
 sudo k3s kubectl get nodes
