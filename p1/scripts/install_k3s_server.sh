@@ -1,28 +1,36 @@
 #!/bin/bash
 
-# Install k3s in server mode
-curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--node-ip=192.168.56.110 --node-name=ebaillotS --flannel-iface=eth1" sh -
+# Цвета для вывода
+GREEN="\033[0;32m"
+YELLOW="\033[1;33m"
+RED="\033[0;31m"
+RESET="\033[0m"
 
-# Wait for k3s to be ready and generate node token 
-until sudo k3s kubectl get nodes; do
-    echo "Waiting for k3s to be ready..."
-    sleep 5
+echo -e "${GREEN}Starting k3s agent installation...${RESET}"
+
+# Проверяем наличие node-token, ожидаем его появления
+echo -e "${YELLOW}Waiting for node token to be available...${RESET}"
+while [ ! -f /vagrant/shared/node-token ]; do
+  echo -e "${YELLOW}Still waiting for node token...${RESET}"
+  sleep 3
 done
 
-# Create a directory for the node token
-mkdir -p /vagrant/shared
+# Чтение токена
+NODE_TOKEN=$(cat /vagrant/shared/node-token)
 
-# Copy the node token to the shared directory
-sudo cp /var/lib/rancher/k3s/server/node-token /vagrant/shared/node-token
+# Проверка что токен не пустой
+if [ -z "$NODE_TOKEN" ]; then
+  echo -e "${RED}Error: Node token is empty!${RESET}"
+  exit 1
+fi
 
-# Ensure the node token is readable
-sudo chmod 644 /vagrant/shared/node-token
+echo -e "${GREEN}Node token found! Installing k3s agent...${RESET}"
 
-# Copy the kubeconfig file to the shared directory
-sudo cp /etc/rancher/k3s/k3s.yaml /vagrant/shared/k3s.yaml
+# Установка агента
+curl -sfL https://get.k3s.io | \
+  K3S_URL="https://192.168.56.110:6443" \
+  K3S_TOKEN="$NODE_TOKEN" \
+  INSTALL_K3S_EXEC="--node-ip=192.168.56.111 --node-name=ebaillotSW --flannel-iface=eth1" \
+  sh -
 
-# Ensure the kubeconfig file is readable
-sudo chmod 644 /vagrant/shared/k3s.yaml
-
-# Check k3s status
-sudo k3s kubectl get nodes
+echo -e "${GREEN}k3s agent installed and connected to server!${RESET}"
