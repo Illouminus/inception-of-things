@@ -1,47 +1,56 @@
+# Vagrantfile
 Vagrant.configure("2") do |config|
+  # Base image: Debian 12 (bookworm). Smaller than Ubuntu; systemd & sshd out of the box.
+  config.vm.box = "debian/bookworm64"
 
-  config.vm.define "agloriosS" do |master|
-    master.vm.box = "generic/alpine312"
-    master.vm.network "private_network", ip: "192.168.56.110"
-    master.vm.hostname = "agloriosS"
-	master.vm.synced_folder "./confs", "/vagrant", type:"virtualbox"
-    master.vm.provider "virtualbox" do |vb|
-      vb.memory = "1024"
-	  vb.cpus = "1"
-	  vb.name = "agloriosS"
-	end
+  # Let Vagrant replace the insecure key with a per-VM key automatically.
+  config.ssh.insert_key = true
 
-    master.vm.provision "shell", inline: <<-SHELL
-	  curl -sfL https://get.k3s.io | K3S_KUBECONFIG_MODE="644" INSTALL_K3S_EXEC="--flannel-iface eth1" sh -
-	  sleep 10
-	  sudo chmod 644 /etc/rancher/k3s/k3s.yaml
-	  NODE_TOKEN="/var/lib/rancher/k3s/server/node-token"
-      while [ ! -e ${NODE_TOKEN} ]
-      do
-          sleep 2
-      done
-      sudo cat ${NODE_TOKEN}
-      sudo cp ${NODE_TOKEN} /vagrant/
-      KUBE_CONFIG="/etc/rancher/k3s/k3s.yaml"
-      sudo cp ${KUBE_CONFIG} /vagrant/
-    SHELL
+  # --- Fixed, explicit project constants (no external ENV needed) ---
+  login     = "ebaillot"
+  k3s_token = "k3sSuperSecret123!"      # For class/demo this is OK; never do this in prod.
+  server_ip = "192.168.56.110"
+  worker_ip = "192.168.56.111"
+
+  nodes = {
+    "#{login}S"  => { ip: server_ip, role: "server" },
+    "#{login}SW" => { ip: worker_ip, role: "agent"  }
+  }
+
+  nodes.each do |name, opts|
+    config.vm.define name do |node|
+      node.vm.hostname = name
+
+      # Host-only NIC with a static IP (becomes the 2nd interface inside the VM, e.g. enp0s8).
+      node.vm.network "private_network", ip: opts[:ip]
+
+      # Minimal resources for k3s; 1 GiB RAM is a sweet spot.
+      node.vm.provider "virtualbox" do |vb|
+        vb.memory = 1024
+        vb.cpus   = 1
+        # If you keep VM disks on a USB drive, set VirtualBox default machine folder in GUI.
+        # Alternatively uncomment the next line to force this project to a specific folder:
+        # vb.customize ["modifyvm", :id, "--basefolder", "/media/#{ENV['USER']}/Disque_dur/VirtualBoxVMs"]
+      end
+
+      # Base packages & small housekeeping (idempotent, runs on both VMs).
+      node.vm.provision "shell", path: "provision/common.sh"
+
+      if opts[:role] == "server"
+        # Install k3s server on the control-plane node.
+        node.vm.provision "shell",
+          path: "provision/control.sh",
+          env: { "K3S_TOKEN" => k3s_token, "NODE_IP" => server_ip }
+      else
+        # Install k3s agent on the worker node and join it to the server.
+        node.vm.provision "shell",
+          path: "provision/worker.sh",
+          env: {
+            "K3S_TOKEN" => k3s_token,
+            "NODE_IP"   => worker_ip,
+            "SERVER_IP" => server_ip
+          }
+      end
+    end
   end
-   
-  config.vm.define "agloriosSW" do |node1|
-    node1.vm.box = "generic/alpine312"
-    node1.vm.hostname = "agloriosSW"
-	node1.vm.synced_folder "./confs", "/vagrant", type:"virtualbox"
-	node1.vm.network "private_network", ip: "192.168.56.111"
-    node1.vm.provider "virtualbox" do |vb|
-      vb.memory = "1024"
-      vb.cpus = "1"
-      vb.name = "agloriosSW"
-	end
-
-    node1.vm.provision "shell", inline: <<-SHELL
-	  curl -sfL https://get.k3s.io | K3S_KUBECONFIG_MODE="644" INSTALL_K3S_EXEC="--flannel-iface eth1" K3S_URL=https://192.168.56.110:6443 K3S_TOKEN=$(sudo cat /vagrant/node-token) sh -
-	  sleep 10
-    SHELL
-  end
-
 end
