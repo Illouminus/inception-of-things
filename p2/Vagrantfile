@@ -11,38 +11,17 @@ Vagrant.configure("2") do |config|
             vb.name = "ahorsS"
         end
 
+        # Install python/pip/ansible
         master.vm.provision "shell", inline: <<-SHELL
           sudo apt-get update
           sudo apt-get install -y python3 python3-pip
           pip3 install ansible==8.7.0
         SHELL
-      
+     
+        # Provision Ansible
         master.vm.provision "ansible_local" do |ansible|
-            ansible.playbook = "install-k3s.yml"
-            ansible.inventory_path = "inventory.ini"
+          ansible.playbook = "./ansible/provision.yml"
+          ansible.inventory_path = "./ansible/inventory.ini"
         end
-
-        # Copier les fichiers apps.yaml et ingress.yaml depuis l'hôte vers la VM
-        master.vm.provision "file", source: "apps.yaml", destination: "/home/vagrant/apps.yaml"
-        master.vm.provision "file", source: "ingress.yaml", destination: "/home/vagrant/ingress.yaml"
-        
-        master.vm.provision "shell", inline: <<-SHELL
-          sudo mv /home/vagrant/apps.yaml /var/lib/rancher/k3s/server/manifests/
-          sudo mv /home/vagrant/ingress.yaml /var/lib/rancher/k3s/server/manifests/
-        SHELL
-
-        # Déplacer les fichiers dans le dossier manifests K3s et attendre que les pods soient Running
-        master.vm.provision "shell", inline: <<-SHELL
-          sudo mv /home/vagrant/apps.yaml /var/lib/rancher/k3s/server/manifests/
-          sudo mv /home/vagrant/ingress.yaml /var/lib/rancher/k3s/server/manifests/
-
-          echo "Attente que tous les pods soient Running..."
-          until sudo kubectl get pods -A --no-headers | grep -v Running | grep -v Completed | wc -l | grep -q '^0$'; do
-            echo "Pods pas encore tous Running, attente 5s..."
-            sleep 5
-          done
-          echo "Tous les pods sont Running!"
-        SHELL
-
     end
 end
