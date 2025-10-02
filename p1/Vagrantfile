@@ -1,6 +1,6 @@
 # Vagrantfile
 Vagrant.configure("2") do |config|
-  # Base image: Debian 12 (bookworm). Smaller than Ubuntu; systemd & sshd out of the box.
+  # Base image: Debian 12 (bookworm).
   config.vm.box = "debian/bookworm64"
 
   # Let Vagrant replace the insecure key with a per-VM key automatically.
@@ -8,7 +8,7 @@ Vagrant.configure("2") do |config|
 
   # --- Fixed, explicit project constants (no external ENV needed) ---
   login     = "ebaillot"
-  k3s_token = "k3sSuperSecret123!"      # For class/demo this is OK; never do this in prod.
+  k3s_token = "k3sSuperSecret123!" 
   server_ip = "192.168.56.110"
   worker_ip = "192.168.56.111"
 
@@ -28,8 +28,6 @@ Vagrant.configure("2") do |config|
       node.vm.provider "virtualbox" do |vb|
         vb.memory = 1024
         vb.cpus   = 1
-        # If you keep VM disks on a USB drive, set VirtualBox default machine folder in GUI.
-        # Alternatively uncomment the next line to force this project to a specific folder:
         # vb.customize ["modifyvm", :id, "--basefolder", "/media/#{ENV['USER']}/Disque_dur/VirtualBoxVMs"]
       end
 
