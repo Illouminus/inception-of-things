@@ -9,7 +9,7 @@
         update_cache: yes
 
     - name: Installer k3s (server)
-      shell: curl -sfL https://get.k3s.io | sh -
+      shell: curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--node-ip=192.168.56.110" sh - 
       args:
         creates: /usr/local/bin/k3s
 
