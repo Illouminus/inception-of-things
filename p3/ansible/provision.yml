@@ -1,23 +1,65 @@
 ---
-- name: Installer k3s, k3d et Argo CD
+- name: Installer k3d, kubectl et Argo CD
   hosts: all
   become: yes
+  gather_facts: no
   tasks:
-    - name: Installer k3s
-      shell: curl -sfL https://get.k3s.io | sh -
+
+    # === Docker ===
+    - name: Vérifier si Docker est installé
+      command: docker --version
+      register: docker_check
+      ignore_errors: true
+
+    - name: Installer Docker (si absent)
+      shell: |
+        apt update -y
+        apt install -y docker.io
+      when: docker_check.rc != 0
+
+    - name: S'assurer que le service Docker est actif
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    # === k3d ===
+    - name: Vérifier si k3d est installé
+      command: k3d version
+      register: k3d_check
+      ignore_errors: true
 
     - name: Installer k3d
-      shell: curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
+      shell: |
+        curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
+      when: k3d_check.rc != 0
+
+    # === kubectl ===
+    - name: Vérifier si kubectl est installé
+      command: kubectl version --client
+      register: kubectl_check
+      ignore_errors: true
 
     - name: Installer kubectl
       shell: |
         curl -LO "https://dl.k8s.io/release/$(curl -Ls https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
         install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
         rm -f kubectl
+      when: kubectl_check.rc != 0
 
+    # === Cluster k3d ===
+    - name: Créer un cluster k3d nommé 'demo-cluster'
+      shell: k3d cluster create demo-cluster --wait
+      register: k3d_cluster
+      ignore_errors: true
+
+    # === Argo CD ===
     - name: Créer le namespace Argo CD
       shell: kubectl create namespace argocd || true
 
     - name: Installer Argo CD
       shell: kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+
+    - name: Attendre que le serveur Argo CD soit prêt
+      shell: kubectl -n argocd wait --for=condition=available --timeout=600s deployment/argocd-server
 
