@@ -1,0 +1,46 @@
+
+# Execute after executing start.sh
+---
+- name: Configurer la VM IoT Debian
+  hosts: localhost
+  become: yes
+  vars:
+    packages:
+      - python3-pip
+      - curl
+      - wget
+      - vim
+      - build-essential
+      - sudo
+
+  tasks:
+    - name: Mettre à jour la liste des paquets
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Mettre à niveau les paquets existants
+      apt:
+        upgrade: dist
+
+    - name: Installer les packages nécessaires
+      apt:
+        name: "{{ packages }}"
+        state: present
+
+    - name: Créer un utilisateur IoT avec sudo (si nécessaire)
+      user:
+        name: iotuser
+        groups: sudo
+        append: yes
+        shell: /bin/bash
+        state: present
+        password: "{{ 'password' | password_hash('sha512') }}"
+
+    - name: Créer un dossier de projet
+      file:
+        path: /home/iotuser/inception-of-things
+        state: directory
+        owner: iotuser
+        group: iotuser
+        mode: '0755'
