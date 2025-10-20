@@ -1,54 +1,23 @@
-- hosts: masters
+---
+- name: Installer k3s, k3d et Argo CD
+  hosts: all
   become: yes
   tasks:
-    - name: Installer dépendances
-      apt:
-        name:
-          - curl
-        state: present
-        update_cache: yes
+    - name: Installer k3s
+      shell: curl -sfL https://get.k3s.io | sh -
 
-    - name: Installer k3s (server)
-      shell: curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--node-ip=192.168.56.110" sh - 
-      args:
-        creates: /usr/local/bin/k3s
+    - name: Installer k3d
+      shell: curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
 
-    - name: Vérifier que k3s est lancé
-      systemd:
-        name: k3s
-        state: started
-        enabled: yes
-
-    - name: Creer dossier manifests si absent
-      file:
-        path: /var/lib/rancher/k3s/server/manifests
-        state: directory
-        owner: root
-        group: root
-        mode: '0755'
-
-    - name: Copier apps.yaml dans mainfest
-      copy:
-        src: /vagrant/apps.yaml
-        dest: /var/lib/rancher/k3s/server/manifests/apps.yaml
-        owner: root
-        group: root
-        mode: '0644'
-
-    - name: Copier ingress.yaml dans le dossier manifests
-      copy:
-        src: /vagrant/ingress.yaml
-        dest: /var/lib/rancher/k3s/server/manifests/ingress.yaml
-        owner: root
-        group: root
-        mode: '0644'
-
-    - name: Attendre que tous les pods soient Running
+    - name: Installer kubectl
       shell: |
-        until kubectl get pods -A --no-headers | grep -v Running | grep -v Completed | wc -l | grep -q '^0$'; do
-          sleep 5
-        done
-      retries: 12
-      delay: 5
-      register: wait_pods
-      until: wait_pods.rc == 0
+        curl -LO "https://dl.k8s.io/release/$(curl -Ls https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+        install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+        rm -f kubectl
+
+    - name: Créer le namespace Argo CD
+      shell: kubectl create namespace argocd || true
+
+    - name: Installer Argo CD
+      shell: kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+
