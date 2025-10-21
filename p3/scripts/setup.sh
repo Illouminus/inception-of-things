@@ -11,7 +11,9 @@ sudo apt upgrade
 # Installing required packages
 
 echo "=== STEP 1 ==="
-echo "Docker config"
+echo "Docker installation"
+curl -fsSL https://get.docker.com -o get-docker.sh
+sudo sh ./get-docker.sh
 sudo usermod -aG docker $(whoami)
 
 echo "=== STEP 2 ==="
